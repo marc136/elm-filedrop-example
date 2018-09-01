@@ -72,8 +72,7 @@ update msg model =
             )
 
         DataUri (Err err) ->
-            --( model, Cmd.none )
-            Debug.todo (Json.errorToString err)
+            ( model, logError (Json.errorToString err) )
 
         DisplayDataUri base64 ->
             ( { model | dataUri = base64 }, Cmd.none )
@@ -264,6 +263,9 @@ toFile type_ name size uri =
 
 
 port drop : Json.Value -> Cmd msg
+
+
+port logError : String -> Cmd msg
 
 
 port getDataUri : (Json.Value -> msg) -> Sub msg

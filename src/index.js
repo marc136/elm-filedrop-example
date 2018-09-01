@@ -28,6 +28,7 @@ main.ports.drop.subscribe(files => {
     reader.onerror = console.error;
     reader.readAsDataURL(file);
   });
-
 });
+
+main.ports.logError.subscribe(console.error);
 
