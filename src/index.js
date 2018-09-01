@@ -1,7 +1,7 @@
 import './main.css';
-import { Main } from './Main.elm';
+import { Elm } from './Main.elm';
 
-const main = Main.embed(document.getElementById('root'));
+const main = Elm.Main.init({ node: document.getElementById('root') });
 
 window.main = main
 
@@ -20,7 +20,7 @@ main.ports.drop.subscribe(files => {
 
       console.log('sending file ', data.name, data.type)
       try {
-        main.ports.dataUri.send(data);
+        main.ports.getDataUri.send(data);
       } catch (ex) {
         console.error(ex)
       }

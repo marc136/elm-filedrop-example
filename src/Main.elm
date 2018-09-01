@@ -1,9 +1,11 @@
-port module Main exposing (..)
+port module Main exposing (main)
 
+import Browser
 import Html exposing (Html, div, h1, img, text)
 import Html.Attributes exposing (src)
 import Html.Events
-import Json.Decode
+import Json.Decode as Json
+
 
 
 ---- MODEL ----
@@ -44,9 +46,9 @@ init =
 
 type Msg
     = Clear
-    | Drop Json.Decode.Value
+    | Drop Json.Value
     | Dragging Bool
-    | DataUri (Result String File)
+    | DataUri (Result Json.Error File)
     | DisplayDataUri String
 
 
@@ -56,8 +58,8 @@ update msg model =
         Clear ->
             init
 
-        Drop files ->
-            ( { model | dragging = False }, drop files )
+        Drop files_ ->
+            ( { model | dragging = False }, drop files_ )
 
         Dragging value ->
             ( { model | dragging = value }, Cmd.none )
@@ -71,7 +73,7 @@ update msg model =
 
         DataUri (Err err) ->
             --( model, Cmd.none )
-            Debug.crash err
+            Debug.todo (Json.errorToString err)
 
         DisplayDataUri base64 ->
             ( { model | dataUri = base64 }, Cmd.none )
@@ -90,10 +92,12 @@ view model =
             [ dropArea model.dragging
             , if List.isEmpty model.files then
                 Html.text ""
+
               else
                 files model.files
             , if String.isEmpty model.dataUri then
                 text ""
+
               else
                 Html.div
                     [ Html.Attributes.class "modal" ]
@@ -114,17 +118,17 @@ dropArea dragging =
         [ Html.Attributes.class "drop-area"
         , Html.Attributes.classList [ ( "drag-over", dragging ) ]
         , on "dragover" <|
-            Json.Decode.succeed (Dragging True)
+            Json.succeed (Dragging True)
         , on "dragleave" <|
-            Json.Decode.succeed (Dragging False)
+            Json.succeed (Dragging False)
         , on "drop" <|
-            Json.Decode.map Drop dropEventDecoder
+            Json.map Drop dropEventDecoder
         ]
         [ Html.input
             [ Html.Attributes.type_ "file"
             , Html.Attributes.id "drop-file"
             , Html.Events.on "change" <|
-                Json.Decode.map Drop dropEventDecoder
+                Json.map Drop dropEventDecoder
             ]
             []
         , Html.label
@@ -133,14 +137,21 @@ dropArea dragging =
         ]
 
 
-on : String -> Json.Decode.Decoder msg -> Html.Attribute msg
-on str =
-    Html.Events.onWithOptions str
-        { stopPropagation = False, preventDefault = True }
+on : String -> Json.Decoder msg -> Html.Attribute msg
+on str decoder =
+    Html.Events.custom str (Json.map custom decoder)
+
+
+custom : msg -> { message : msg, stopPropagation : Bool, preventDefault : Bool }
+custom msg =
+    { message = msg
+    , stopPropagation = False
+    , preventDefault = True
+    }
 
 
 files : List File -> Html Msg
-files files =
+files files_ =
     Html.div
         [ Html.Attributes.class "files" ]
         [ Html.div
@@ -151,7 +162,7 @@ files files =
                 [ Html.text "clear" ]
             ]
         , Html.ul [] <|
-            List.indexedMap viewFile files
+            List.indexedMap viewFile files_
         ]
 
 
@@ -163,9 +174,7 @@ viewFile index file =
                 [ Html.div [ Html.Attributes.class "preview" ]
                     [ Html.img [ Html.Attributes.src dataUri ] [] ]
                 , Html.div [ Html.Attributes.class "info" ]
-                    [ Html.p []
-                        [ Html.text <| name ++ " (" ++ toString size ++ "Byte)"
-                        ]
+                    [ Html.p [] [ Html.text <| name ++ " " ++ byte size ]
                     , data dataUri
                     ]
                 ]
@@ -175,20 +184,22 @@ viewFile index file =
                 [ Html.Attributes.class "unknown" ]
                 [ Html.p []
                     [ Html.text <|
-                        String.join " "
-                            [ name
-                            , "(" ++ toString size ++ "Byte)"
-                            , type_
-                            ]
+                        String.join " " [ name, byte size, type_ ]
                     ]
                 , data dataUri
                 ]
+
+
+byte : Int -> String
+byte size =
+    "(" ++ String.fromInt size ++ "Byte)"
 
 
 data : String -> Html Msg
 data dataUri =
     if String.length dataUri < 12000 then
         Html.textarea [] [ text dataUri ]
+
     else
         Html.button
             [ Html.Events.onClick <| DisplayDataUri dataUri ]
@@ -202,7 +213,7 @@ data dataUri =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
-        [ dataUri (DataUri << dataUriDecoder)
+        [ getDataUri (DataUri << dataUriDecoder)
         ]
 
 
@@ -210,11 +221,11 @@ subscriptions model =
 ---- PROGRAM ----
 
 
-main : Program Never Model Msg
+main : Program () Model Msg
 main =
-    Html.program
+    Browser.element
         { view = view
-        , init = init
+        , init = \_ -> init
         , update = update
         , subscriptions = subscriptions
         }
@@ -224,34 +235,35 @@ main =
 ----- DECODER ----
 
 
-dropEventDecoder : Json.Decode.Decoder Json.Decode.Value
+dropEventDecoder : Json.Decoder Json.Value
 dropEventDecoder =
-    Json.Decode.at [ "dataTransfer", "files" ] Json.Decode.value
+    Json.at [ "dataTransfer", "files" ] Json.value
 
 
-dataUriDecoder : Json.Decode.Value -> Result String File
+dataUriDecoder : Json.Value -> Result Json.Error File
 dataUriDecoder =
-    Json.Decode.decodeValue <|
-        Json.Decode.map4 toFile
-            (Json.Decode.field "type" Json.Decode.string)
-            (Json.Decode.field "name" Json.Decode.string)
-            (Json.Decode.field "size" Json.Decode.int)
-            (Json.Decode.field "dataUri" Json.Decode.string)
+    Json.decodeValue <|
+        Json.map4 toFile
+            (Json.field "type" Json.string)
+            (Json.field "name" Json.string)
+            (Json.field "size" Json.int)
+            (Json.field "dataUri" Json.string)
 
 
 toFile : String -> String -> Int -> String -> File
-toFile type_ name size dataUri =
+toFile type_ name size uri =
     if String.startsWith "image" type_ then
-        Image <| FileInfo name size dataUri
+        Image <| FileInfo name size uri
+
     else
-        Unknown type_ <| FileInfo name size dataUri
+        Unknown type_ <| FileInfo name size uri
 
 
 
 ---- PORTS ----
 
 
-port drop : Json.Decode.Value -> Cmd msg
+port drop : Json.Value -> Cmd msg
 
 
-port dataUri : (Json.Decode.Value -> msg) -> Sub msg
+port getDataUri : (Json.Value -> msg) -> Sub msg
