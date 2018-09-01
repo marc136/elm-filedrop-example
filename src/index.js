@@ -2,8 +2,7 @@ import './main.css';
 import { Elm } from './Main.elm';
 
 const main = Elm.Main.init({ node: document.getElementById('root') });
-
-window.main = main
+window.main = main;
 
 main.ports.drop.subscribe(files => {
   console.log(files);
@@ -31,4 +30,3 @@ main.ports.drop.subscribe(files => {
 });
 
 main.ports.logError.subscribe(console.error);
-

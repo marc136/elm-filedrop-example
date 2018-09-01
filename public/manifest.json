@@ -1,6 +1,6 @@
 {
-  "short_name": "Elm App",
-  "name": "Create Elm App Sample",
+  "short_name": "Filedrop example",
+  "name": "Filedrop example with Elm 0.19",
   "icons": [
     {
       "src": "favicon.ico",
